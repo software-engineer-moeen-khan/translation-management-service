@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Requests\Translation;
 
 use App\DataTransferObjects\TranslationSearchCriteria;
+use App\Http\Requests\Concerns\NormalizesTagFilter;
 use Illuminate\Foundation\Http\FormRequest;
 
 class SearchTranslationsRequest extends FormRequest
 {
+    use NormalizesTagFilter;
+
     public function authorize(): bool
     {
         return true;
@@ -43,23 +46,8 @@ class SearchTranslationsRequest extends FormRequest
         );
     }
 
-    /**
-     * Accept tags as either "tags=web,mobile" or "tags[]=web&tags[]=mobile".
-     */
     protected function prepareForValidation(): void
     {
-        $tags = $this->query('tags');
-
-        if (is_string($tags)) {
-            $tags = explode(',', $tags);
-        }
-
-        if (is_array($tags)) {
-            $tags = array_map(fn (mixed $tag): mixed => is_string($tag) ? mb_strtolower(trim($tag)) : $tag, $tags);
-
-            $this->merge([
-                'tags' => array_values(array_unique(array_filter($tags, fn (mixed $tag): bool => $tag !== ''), SORT_REGULAR)),
-            ]);
-        }
+        $this->normalizeTagFilter();
     }
 }

@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\LocaleController;
 use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\TranslationController;
+use App\Http\Controllers\Api\V1\TranslationExportController;
+use App\Http\Middleware\AuthenticateExport;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function (): void {
@@ -22,4 +24,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::apiResource('translations', TranslationController::class)
             ->whereNumber('translation');
     });
+
+    // Token protected unless the export has been made public for CDN delivery.
+    Route::get('export/{locale:code}', TranslationExportController::class)
+        ->middleware([AuthenticateExport::class, 'throttle:api'])
+        ->name('export');
 });

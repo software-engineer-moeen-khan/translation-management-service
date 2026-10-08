@@ -9,9 +9,11 @@ use App\DataTransferObjects\TranslationSearchCriteria;
 use App\Models\Tag;
 use App\Models\Translation;
 use App\Support\FullTextExpression;
+use Closure;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 
 class EloquentTranslationRepository implements TranslationRepository
 {
@@ -40,12 +42,7 @@ class EloquentTranslationRepository implements TranslationRepository
         }
 
         if ($criteria->tags !== []) {
-            $query->whereIn('id', function (QueryBuilder $tagged) use ($criteria): void {
-                $tagged->select('tag_translation.translation_id')
-                    ->from('tag_translation')
-                    ->join('tags', 'tags.id', '=', 'tag_translation.tag_id')
-                    ->whereIn('tags.name', $criteria->tags);
-            });
+            $query->whereIn('id', $this->taggedWith($criteria->tags));
         }
 
         // Keyset pagination: page N costs the same as page 1, with no COUNT(*) over the table.
@@ -84,6 +81,35 @@ class EloquentTranslationRepository implements TranslationRepository
     public function delete(Translation $translation): void
     {
         $translation->delete();
+    }
+
+    public function pairsForLocale(int $localeId, array $tags = []): array
+    {
+        // Query builder instead of Eloquent: an export can cover the whole table
+        // and hydrating a model per row would dominate the response time.
+        $query = DB::table('translations')->where('locale_id', $localeId);
+
+        if ($tags !== []) {
+            $query->whereIn('id', $this->taggedWith($tags));
+        }
+
+        return $query->pluck('content', 'key')->all();
+    }
+
+    /**
+     * Sub-select of the ids of translations carrying at least one of the tags.
+     *
+     * @param  list<string>  $tags
+     * @return Closure(QueryBuilder): void
+     */
+    private function taggedWith(array $tags): Closure
+    {
+        return function (QueryBuilder $tagged) use ($tags): void {
+            $tagged->select('tag_translation.translation_id')
+                ->from('tag_translation')
+                ->join('tags', 'tags.id', '=', 'tag_translation.tag_id')
+                ->whereIn('tags.name', $tags);
+        };
     }
 
     /**

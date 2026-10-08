@@ -31,4 +31,13 @@ interface TranslationRepository
     public function update(Translation $translation, array $attributes, ?array $tags = null): bool;
 
     public function delete(Translation $translation): void;
+
+    /**
+     * Every translation of a locale as key => content, optionally limited to
+     * translations carrying at least one of the given tags.
+     *
+     * @param  list<string>  $tags
+     * @return array<string, string>
+     */
+    public function pairsForLocale(int $localeId, array $tags = []): array;
 }
