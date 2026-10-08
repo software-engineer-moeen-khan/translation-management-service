@@ -1,0 +1,673 @@
+openapi: 3.0.3
+
+info:
+  title: Translation Management Service
+  version: 1.0.0
+  description: |
+    API for storing translations in multiple locales, tagging them by context and
+    exporting them as JSON for frontend applications.
+
+    ## Authentication
+
+    Exchange a user's credentials for a bearer token with `POST /auth/login` and send
+    it on every other request:
+
+    ```
+    Authorization: Bearer <token>
+    ```
+
+    ## Errors
+
+    Errors are always JSON. Validation failures return `422` with an `errors` object
+    keyed by field; everything else returns a `message`.
+
+    ## Rate limiting
+
+    Requests are limited per user (per IP when anonymous). Responses carry
+    `X-RateLimit-Limit` and `X-RateLimit-Remaining`; a `429` includes `Retry-After`.
+
+servers:
+  - url: /api/v1
+    description: This server
+
+tags:
+  - name: Authentication
+  - name: Locales
+  - name: Tags
+  - name: Translations
+  - name: Export
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Obtain an API token
+      description: Limited to 5 attempts per minute for each email and IP address.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 255
+                  example: admin@example.com
+                password:
+                  type: string
+                  format: password
+                  maxLength: 255
+                  example: password
+                device_name:
+                  type: string
+                  maxLength: 100
+                  description: Label stored with the token.
+                  default: api
+                  example: ci-pipeline
+      responses:
+        '200':
+          description: Token issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        '401':
+          description: The credentials are wrong.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Invalid credentials.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke the token used for this request
+      operationId: logout
+      responses:
+        '204':
+          description: Token revoked.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /locales:
+    get:
+      tags: [Locales]
+      summary: List locales
+      operationId: listLocales
+      responses:
+        '200':
+          description: All locales, ordered by code.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Locale'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [Locales]
+      summary: Add a locale
+      description: New languages can be added at any time; no deployment is needed.
+      operationId: createLocale
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code:
+                  type: string
+                  maxLength: 12
+                  pattern: '^[a-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$'
+                  example: pt-BR
+                name:
+                  type: string
+                  maxLength: 64
+                  example: Portuguese (Brazil)
+      responses:
+        '201':
+          description: Locale created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Locale'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /tags:
+    get:
+      tags: [Tags]
+      summary: List tags
+      description: Tags are created implicitly the first time a translation uses them.
+      operationId: listTags
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of tags, ordered by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tag'
+                  links:
+                    $ref: '#/components/schemas/CursorLinks'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /translations:
+    get:
+      tags: [Translations]
+      summary: List and search translations
+      description: |
+        All filters are optional and combined with AND. Results are ordered by id and
+        paginated with a cursor: follow `links.next` (or pass `meta.next_cursor` as
+        `cursor`) to read the next page.
+      operationId: searchTranslations
+      parameters:
+        - name: key
+          in: query
+          description: Matches translations whose key contains this text.
+          schema:
+            type: string
+            maxLength: 191
+          example: login
+        - name: content
+          in: query
+          description: |
+            Matches translations whose content contains this text. On MySQL the search
+            is word based: every word must be present and each is matched as a prefix.
+          schema:
+            type: string
+            maxLength: 255
+          example: welcome
+        - name: tags
+          in: query
+          description: |
+            Comma separated tag names (`tags=web,mobile`) or a repeated parameter
+            (`tags[]=web&tags[]=mobile`). Matches translations carrying at least one.
+          schema:
+            type: string
+          example: web,mobile
+        - name: locale
+          in: query
+          description: Restrict the search to one locale code.
+          schema:
+            type: string
+            maxLength: 12
+          example: en
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of matching translations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Translation'
+                  links:
+                    $ref: '#/components/schemas/CursorLinks'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Translations]
+      summary: Create a translation
+      operationId: createTranslation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslationInput'
+      responses:
+        '201':
+          description: Translation created.
+          headers:
+            Location:
+              description: URL of the new translation.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Translation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /translations/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      tags: [Translations]
+      summary: View a translation
+      operationId: showTranslation
+      responses:
+        '200':
+          description: The translation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Translation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Translations]
+      summary: Update a translation
+      description: |
+        Only the fields that are sent are changed. Sending `tags` replaces the
+        translation's tags; omitting it leaves them untouched. `PUT` is accepted
+        with the same semantics.
+      operationId: updateTranslation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslationPatch'
+      responses:
+        '200':
+          description: The updated translation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Translation'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Translations]
+      summary: Delete a translation
+      operationId: deleteTranslation
+      responses:
+        '204':
+          description: Translation deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /export/{locale}:
+    get:
+      tags: [Export]
+      summary: Export a locale as JSON
+      description: |
+        Returns every translation of a locale as one JSON document, ready to be
+        handed to a frontend i18n library such as vue-i18n.
+
+        The response always reflects the latest data: every create, update, delete
+        or tag change is visible on the next request.
+
+        **Caching.** The response carries an `ETag`. Send it back in `If-None-Match`
+        to receive an empty `304 Not Modified` while nothing has changed.
+
+        **CDN delivery.** With `TRANSLATIONS_EXPORT_PUBLIC=true` this endpoint needs
+        no token and responds with `Cache-Control: public`, so a CDN can cache it
+        and revalidate against the origin.
+      operationId: exportTranslations
+      parameters:
+        - name: locale
+          in: path
+          required: true
+          description: Locale code.
+          schema:
+            type: string
+          example: en
+        - name: format
+          in: query
+          description: |
+            `flat` keeps keys as stored (`{"auth.login.title": "Sign in"}`);
+            `nested` expands dotted keys into objects
+            (`{"auth": {"login": {"title": "Sign in"}}}`).
+          schema:
+            type: string
+            enum: [flat, nested]
+            default: flat
+        - name: tags
+          in: query
+          description: Only export translations carrying at least one of these tags.
+          schema:
+            type: string
+          example: web
+        - name: If-None-Match
+          in: header
+          description: ETag of the copy the client already holds.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The translations of the locale.
+          headers:
+            ETag:
+              description: Identifies this exact version of the export.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-cache
+            Content-Language:
+              schema:
+                type: string
+              example: en
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+              examples:
+                flat:
+                  value:
+                    auth.login.title: Sign in
+                    auth.login.submit: Continue
+                nested:
+                  value:
+                    auth:
+                      login:
+                        title: Sign in
+                        submit: Continue
+        '304':
+          description: The client's copy is still current.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token returned by `POST /auth/login`.
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor taken from `meta.next_cursor` or `meta.prev_cursor`.
+      schema:
+        type: string
+
+  schemas:
+    Token:
+      type: object
+      properties:
+        token:
+          type: string
+          example: 1|Yq3mVb0cXkT9uH2sLw8ZrN5aPd7eGf4jKi6oMx1C
+        token_type:
+          type: string
+          example: Bearer
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Locale:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        code:
+          type: string
+          example: en
+        name:
+          type: string
+          example: English
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: web
+
+    Translation:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 42
+        key:
+          type: string
+          example: auth.login.title
+        locale:
+          type: string
+          example: en
+        content:
+          type: string
+          example: Sign in
+        tags:
+          type: array
+          items:
+            type: string
+          example: [mobile, web]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TranslationInput:
+      type: object
+      required: [locale, key, content]
+      properties:
+        locale:
+          type: string
+          description: Code of an existing locale.
+          example: en
+        key:
+          type: string
+          maxLength: 191
+          pattern: '^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$'
+          description: Dot separated identifier, unique within the locale.
+          example: auth.login.title
+        content:
+          type: string
+          maxLength: 10000
+          example: Sign in
+        tags:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 64
+            pattern: '^[a-z0-9][a-z0-9_-]*$'
+          description: Tag names (case-insensitive). Unknown tags are created.
+          example: [web, mobile]
+
+    TranslationPatch:
+      type: object
+      properties:
+        locale:
+          type: string
+          example: en
+        key:
+          type: string
+          maxLength: 191
+          example: auth.login.heading
+        content:
+          type: string
+          maxLength: 10000
+          example: Sign in to your account
+        tags:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+          example: [web]
+
+    CursorLinks:
+      type: object
+      properties:
+        first:
+          type: string
+          nullable: true
+        last:
+          type: string
+          nullable: true
+        prev:
+          type: string
+          nullable: true
+        next:
+          type: string
+          nullable: true
+
+    CursorMeta:
+      type: object
+      properties:
+        path:
+          type: string
+        per_page:
+          type: integer
+          example: 25
+        next_cursor:
+          type: string
+          nullable: true
+        prev_cursor:
+          type: string
+          nullable: true
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: The key already exists for this locale.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            key: [The key already exists for this locale.]
+
+  responses:
+    Unauthenticated:
+      description: The token is missing, invalid or expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Unauthenticated.
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Resource not found.
+    Conflict:
+      description: A concurrent request created the same key for this locale first.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: The resource already exists.
+    ValidationError:
+      description: The request is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Too Many Attempts.
