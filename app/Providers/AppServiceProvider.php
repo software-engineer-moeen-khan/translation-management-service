@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Contracts\LocaleRepository;
+use App\Contracts\TranslationRepository;
+use App\Repositories\EloquentLocaleRepository;
+use App\Repositories\EloquentTranslationRepository;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -13,12 +17,14 @@ use Illuminate\Support\Str;
 class AppServiceProvider extends ServiceProvider
 {
     /**
-     * Register any application services.
+     * Contracts and the implementations the application depends on.
+     *
+     * @var array<class-string, class-string>
      */
-    public function register(): void
-    {
-        //
-    }
+    public array $bindings = [
+        LocaleRepository::class => EloquentLocaleRepository::class,
+        TranslationRepository::class => EloquentTranslationRepository::class,
+    ];
 
     /**
      * Bootstrap any application services.

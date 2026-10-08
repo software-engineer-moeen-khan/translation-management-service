@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\LocaleController;
 use App\Http\Controllers\Api\V1\TagController;
+use App\Http\Controllers\Api\V1\TranslationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function (): void {
@@ -17,5 +18,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('locales', [LocaleController::class, 'store'])->name('locales.store');
 
         Route::get('tags', [TagController::class, 'index'])->name('tags.index');
+
+        Route::apiResource('translations', TranslationController::class)
+            ->only(['store', 'show', 'update', 'destroy'])
+            ->whereNumber('translation');
     });
 });
