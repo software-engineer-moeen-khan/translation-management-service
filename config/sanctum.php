@@ -35,9 +35,12 @@ return [
     | are able to authenticate the request, Sanctum will use the bearer
     | token that's present on an incoming request for authentication.
     |
+    | This service is a stateless API, so no session guard is consulted and
+    | a bearer token is the only way to authenticate.
+    |
     */
 
-    'guard' => ['web'],
+    'guard' => [],
 
     /*
     |--------------------------------------------------------------------------
