@@ -1,13 +1,14 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "moeenkhan/translation-management-service",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "API-driven translation management service.",
+    "keywords": ["laravel", "translations", "i18n", "api"],
     "license": "MIT",
     "require": {
         "php": "^8.3",
         "laravel/framework": "^13.17",
+        "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0"
     },
     "require-dev": {
@@ -36,13 +37,7 @@
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
-            "@php artisan migrate --force",
-            "npm install --ignore-scripts",
-            "npm run build"
-        ],
-        "dev": [
-            "Composer\\Config::disableProcessTimeout",
-            "@php artisan dev"
+            "@php artisan migrate --force"
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",
