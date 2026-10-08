@@ -14,6 +14,7 @@ use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
+use PDO;
 
 class EloquentTranslationRepository implements TranslationRepository
 {
@@ -85,15 +86,29 @@ class EloquentTranslationRepository implements TranslationRepository
 
     public function pairsForLocale(int $localeId, array $tags = []): array
     {
-        // Query builder instead of Eloquent: an export can cover the whole table
-        // and hydrating a model per row would dominate the response time.
-        $query = DB::table('translations')->where('locale_id', $localeId);
+        $query = DB::table('translations')->select(['key', 'content'])->where('locale_id', $localeId);
 
         if ($tags !== []) {
             $query->whereIn('id', $this->taggedWith($tags));
         }
 
-        return $query->pluck('content', 'key')->all();
+        // An export can cover the whole table, so rows are read straight into a
+        // key => content array by the driver. Hydrating a model, or even a plain
+        // object, per row would dominate both response time and memory.
+        $connection = $query->getConnection();
+        $sql = $query->toSql();
+        $bindings = $connection->prepareBindings($query->getBindings());
+        $startedAt = microtime(true);
+
+        $statement = $connection->getReadPdo()->prepare($sql);
+        $connection->bindValues($statement, $bindings);
+        $statement->execute();
+        $pairs = $statement->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        // Keep the statement visible to query listeners and the query log.
+        $connection->logQuery($sql, $bindings, round((microtime(true) - $startedAt) * 1000, 2));
+
+        return $pairs;
     }
 
     /**
