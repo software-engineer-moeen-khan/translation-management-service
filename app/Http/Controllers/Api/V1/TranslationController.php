@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Contracts\TranslationRepository;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Translation\SearchTranslationsRequest;
 use App\Http\Requests\Translation\StoreTranslationRequest;
 use App\Http\Requests\Translation\UpdateTranslationRequest;
 use App\Http\Resources\TranslationResource;
 use App\Models\Translation;
 use App\Services\TranslationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 
 class TranslationController extends Controller
@@ -20,8 +23,15 @@ class TranslationController extends Controller
      */
     private const RELATIONS = ['locale:id,code', 'tags:id,name'];
 
-    public function __construct(private readonly TranslationService $translations)
+    public function __construct(
+        private readonly TranslationService $translations,
+        private readonly TranslationRepository $repository,
+    ) {
+    }
+
+    public function index(SearchTranslationsRequest $request): AnonymousResourceCollection
     {
+        return TranslationResource::collection($this->repository->search($request->criteria()));
     }
 
     public function store(StoreTranslationRequest $request): JsonResponse

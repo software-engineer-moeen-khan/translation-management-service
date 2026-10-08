@@ -18,4 +18,19 @@ return [
         'login' => (int) env('LOGIN_RATE_LIMIT', 5),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Pagination
+    |--------------------------------------------------------------------------
+    |
+    | Page sizes for list endpoints. The maximum bounds the work a single
+    | request can ask the database to do.
+    |
+    */
+
+    'pagination' => [
+        'default' => 25,
+        'max' => 100,
+    ],
+
 ];

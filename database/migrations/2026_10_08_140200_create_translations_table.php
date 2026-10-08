@@ -25,9 +25,8 @@ return new class () extends Migration {
 
             // Serves the uniqueness check and the per-locale export scan.
             $table->unique(['locale_id', 'key']);
-            // Serves key prefix searches that are not scoped to a locale.
-            $table->index('key');
 
+            // Content search is word based where the engine supports it.
             if ($isMySql) {
                 $table->fullText('content');
             }

@@ -4,10 +4,19 @@ declare(strict_types=1);
 
 namespace App\Contracts;
 
+use App\DataTransferObjects\TranslationSearchCriteria;
 use App\Models\Translation;
+use Illuminate\Contracts\Pagination\CursorPaginator;
 
 interface TranslationRepository
 {
+    /**
+     * Find translations matching every given criterion, with locale and tags loaded.
+     *
+     * @return CursorPaginator<int, Translation>
+     */
+    public function search(TranslationSearchCriteria $criteria): CursorPaginator;
+
     /**
      * @param  array{locale_id: int, key: string, content: string}  $attributes
      * @param  list<string>  $tags  Tag names; unknown tags are created.

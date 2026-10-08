@@ -20,7 +20,6 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('tags', [TagController::class, 'index'])->name('tags.index');
 
         Route::apiResource('translations', TranslationController::class)
-            ->only(['store', 'show', 'update', 'destroy'])
             ->whereNumber('translation');
     });
 });
