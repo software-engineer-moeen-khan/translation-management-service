@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Api\V1;
 
+use App\Contracts\TranslationRepository;
 use App\Models\Locale;
 use App\Models\Tag;
 use App\Models\Translation;
 use App\Models\User;
+use Exception;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -308,6 +311,23 @@ class TranslationCrudTest extends TestCase
         $this->patchJson("/api/v1/translations/{$translation->id}", ['content' => 'Home', 'tags' => ['web']])
             ->assertOk();
 
+        $this->assertSame(1, $this->en->refresh()->export_version);
+    }
+
+    public function test_a_write_that_loses_a_race_for_the_same_key_gets_a_409(): void
+    {
+        $this->signIn();
+
+        // Stands in for a concurrent request inserting the key between validation and insert.
+        $this->mock(TranslationRepository::class)
+            ->shouldReceive('create')
+            ->andThrow(new UniqueConstraintViolationException('sqlite', 'insert into translations', [], new Exception()));
+
+        $this->postJson('/api/v1/translations', ['locale' => 'en', 'key' => 'home.title', 'content' => 'Home'])
+            ->assertConflict()
+            ->assertExactJson(['message' => 'The resource already exists.']);
+
+        // The surrounding transaction rolled back, so the export version is untouched.
         $this->assertSame(1, $this->en->refresh()->export_version);
     }
 
