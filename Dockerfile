@@ -35,6 +35,7 @@ FROM build AS test
 
 RUN install-php-extensions pcov \
     && composer install --prefer-dist --no-interaction --no-progress \
+    && cp .env.example .env \
     && echo "opcache.enable_cli=0" > /usr/local/etc/php/conf.d/zz-test.ini
 
 CMD ["php", "artisan", "test", "--coverage", "--min=95"]

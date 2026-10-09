@@ -22,6 +22,8 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- Throwaway key so the suite runs without a .env file (CI, Docker). -->
+        <env name="APP_KEY" value="base64:FsJzMLBDHBvbcOGvWAsyZhMGRfbM18i89U0VDP0Zgbg="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
