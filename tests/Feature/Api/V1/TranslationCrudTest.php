@@ -69,7 +69,7 @@ class TranslationCrudTest extends TestCase
         ]);
         // "Web" is normalised and matched to the existing tag instead of duplicated.
         $this->assertSame(2, Tag::query()->count());
-        $this->assertDatabaseHas('tag_translation', ['translation_id' => $id, 'tag_id' => $existing->id]);
+        $this->assertSame([$id], $existing->translations()->pluck('translations.id')->all());
     }
 
     public function test_it_creates_a_translation_without_tags(): void
