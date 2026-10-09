@@ -16,7 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->api(append: [AddSecurityHeaders::class]);
+        // Global, so that responses rejected early (401, 429) carry the headers too.
+        $middleware->append(AddSecurityHeaders::class);
 
         // API-only service: there is no login page to send guests to.
         $middleware->redirectGuestsTo(null);

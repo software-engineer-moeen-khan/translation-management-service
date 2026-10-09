@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature\Api\V1;
 
 use App\Models\User;
+use App\Services\AuthService;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Hashing\Hasher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\PersonalAccessToken;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -59,6 +63,26 @@ class AuthTest extends TestCase
         $this->postJson('/api/v1/auth/login', ['email' => 'ghost@example.com', 'password' => 'password'])
             ->assertUnauthorized()
             ->assertExactJson(['message' => 'Invalid credentials.']);
+    }
+
+    public function test_unknown_emails_still_cost_exactly_one_password_check(): void
+    {
+        try {
+            $this->app->make(AuthService::class)->issueToken('ghost@example.com', 'password', 'ci');
+            $this->fail('Unknown credentials were accepted.');
+        } catch (AuthenticationException) {
+            // Expected; this first attempt created the placeholder hash.
+        }
+
+        // The placeholder hash is created once and reused, so later attempts do the
+        // same work as an attempt against a real account: a single check.
+        $this->mock(Hasher::class, function (MockInterface $hasher): void {
+            $hasher->shouldReceive('make')->never();
+            $hasher->shouldReceive('check')->once()->andReturnFalse();
+        });
+
+        $this->postJson('/api/v1/auth/login', ['email' => 'ghost@example.com', 'password' => 'password'])
+            ->assertUnauthorized();
     }
 
     public function test_login_validates_input(): void
@@ -114,9 +138,17 @@ class AuthTest extends TestCase
 
     public function test_api_responses_carry_security_headers(): void
     {
-        $this->postJson('/api/v1/auth/login', [])
-            ->assertHeader('X-Content-Type-Options', 'nosniff')
-            ->assertHeader('X-Frame-Options', 'DENY')
-            ->assertHeader('Referrer-Policy', 'no-referrer');
+        $responses = [
+            'validation error' => $this->postJson('/api/v1/auth/login', []),
+            'unauthenticated' => $this->getJson('/api/v1/translations'),
+            'not found' => $this->getJson('/api/v1/nope'),
+        ];
+
+        foreach ($responses as $response) {
+            $response
+                ->assertHeader('X-Content-Type-Options', 'nosniff')
+                ->assertHeader('X-Frame-Options', 'DENY')
+                ->assertHeader('Referrer-Policy', 'no-referrer');
+        }
     }
 }

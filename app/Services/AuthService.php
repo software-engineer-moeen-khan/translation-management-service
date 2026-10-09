@@ -6,19 +6,19 @@ namespace App\Services;
 
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Hashing\Hasher;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\NewAccessToken;
 
 class AuthService
 {
-    /**
-     * Hash compared against when the email is unknown, so that a failed login
-     * costs the same whether or not the account exists.
-     */
-    private ?string $fallbackHash = null;
+    private const FALLBACK_HASH_KEY = 'auth:fallback-password-hash';
 
-    public function __construct(private readonly Hasher $hasher)
-    {
+    public function __construct(
+        private readonly Hasher $hasher,
+        private readonly Cache $cache,
+    ) {
     }
 
     /**
@@ -49,8 +49,16 @@ class AuthService
         $user->currentAccessToken()->delete();
     }
 
+    /**
+     * Hash compared against when the email is unknown, so that a failed login
+     * costs one password check whether or not the account exists. It is created
+     * once and cached; hashing on every attempt would itself give the answer away.
+     */
     private function fallbackHash(): string
     {
-        return $this->fallbackHash ??= $this->hasher->make('fallback-password');
+        return $this->cache->rememberForever(
+            self::FALLBACK_HASH_KEY,
+            fn (): string => $this->hasher->make(Str::random(40)),
+        );
     }
 }
