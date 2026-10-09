@@ -163,17 +163,23 @@ class SeedTranslationsCommand extends Command
 
     /**
      * Tag the new rows with set-based INSERT ... SELECT statements: every row
-     * gets one tag and every fourth row a second one.
+     * gets one tag and roughly a quarter get a second one.
+     *
+     * Buckets are taken modulo primes so that tags stay independent of the
+     * locale a row landed in (which is assigned round-robin).
      *
      * @param  list<int>  $tagIds
      */
     private function tag(int $firstId, array $tagIds): void
     {
-        $tagCount = count($tagIds);
+        [$mobile, $desktop, $web] = $tagIds;
+
+        $this->attachTag($mobile, $firstId, 'id % 11 between ? and ?', [0, 3]);
+        $this->attachTag($desktop, $firstId, 'id % 11 between ? and ?', [4, 7]);
+        $this->attachTag($web, $firstId, 'id % 11 between ? and ?', [8, 10]);
 
         foreach ($tagIds as $index => $tagId) {
-            $this->attachTag($tagId, $firstId, 'id % ? = ?', [$tagCount, $index]);
-            $this->attachTag($tagId, $firstId, 'id % ? = ?', [$tagCount * 4, ($index + 1) % $tagCount]);
+            $this->attachTag($tagId, $firstId, 'id % 13 = ?', [$index]);
         }
     }
 
