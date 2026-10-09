@@ -14,12 +14,7 @@ return new class () extends Migration {
             $table->id();
             $table->foreignId('locale_id')->constrained()->restrictOnDelete();
 
-            // Keys are identifiers consumed by frontends, so they must compare case-sensitively.
-            $key = $table->string('key', 191);
-            if ($isMySql) {
-                $key->collation('utf8mb4_bin');
-            }
-
+            $table->string('key', 191);
             $table->text('content');
             $table->timestamps();
 
